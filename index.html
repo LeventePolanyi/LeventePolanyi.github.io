@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="An interactive implementation of the Basel standardised framework for interest rate risk in the banking book: repricing gap ladder, six prescribed rate shocks, change in economic value of equity and net interest income, and the supervisory outlier test.">
+<meta name="author" content="Levente Polanyi">
+<title>Banking Book Rate Risk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: single instrument column — method, inputs, scenario panel, outlier test. */
+:root {
+  --bg:        #f4f6f8;
+  --surface:   #ffffff;
+  --surface-2: #eceff3;
+  --fg:        #111820;
+  --fg-dim:    #5b6775;
+  --fg-faint:  #8b97a5;
+  --line:      #dbe1e8;
+  --line-soft: #e8ecf1;
+  --accent:    #a86a12;
+  --accent-sv: #fdf4e3;
+  --pos:       #156b43;
+  --neg:       #a32015;
+  --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #0e141b;
+    --surface:   #161d26;
+    --surface-2: #1d2630;
+    --fg:        #e4eaf0;
+    --fg-dim:    #97a3b1;
+    --fg-faint:  #6b7786;
+    --line:      #27313d;
+    --line-soft: #1e2731;
+    --accent:    #d79a3f;
+    --accent-sv: #2a2113;
+    --pos:       #46ab74;
+    --neg:       #e2685c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:        #0e141b;
+  --surface:   #161d26;
+  --surface-2: #1d2630;
+  --fg:        #e4eaf0;
+  --fg-dim:    #97a3b1;
+  --fg-faint:  #6b7786;
+  --line:      #27313d;
+  --line-soft: #1e2731;
+  --accent:    #d79a3f;
+  --accent-sv: #2a2113;
+  --pos:       #46ab74;
+  --neg:       #e2685c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+}
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+/* ---- header ---- */
+header { display: flex; flex-direction: column; gap: 14px; }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 500;
+}
+h1 {
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.1;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+.standfirst { color: var(--fg-dim); max-width: 62ch; margin: 0; font-size: 16px; }
+.byline {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-faint);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+/* ---- sections ---- */
+section { display: flex; flex-direction: column; gap: 16px; }
+h2 {
+  font-size: 13px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+h3 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+p { margin: 0; max-width: 68ch; }
+.note { color: var(--fg-dim); font-size: 14px; }
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 18px;
+}
+
+/* ---- controls ---- */
+.controls { display: flex; flex-wrap: wrap; gap: 20px 28px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+select, input[type="number"] {
+  font-family: var(--mono);
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 7px 9px;
+  min-width: 0;
+}
+input[type="number"] { width: 108px; text-align: right; }
+select { min-width: 190px; }
+input[type="range"] { accent-color: var(--accent); width: 190px; max-width: 100%; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rangeval { font-family: var(--mono); font-size: 13px; color: var(--fg); }
+button {
+  font-family: var(--sans); font-size: 13px; font-weight: 500;
+  background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 4px;
+  padding: 8px 14px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+
+/* ---- tables ---- */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 520px; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line-soft); }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--fg-dim); border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+td.num, td input { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td input {
+  width: 92px; padding: 4px 7px; font-size: 13px;
+  border: 1px solid var(--line-soft); border-radius: 3px;
+  background: var(--bg); color: var(--fg); text-align: right;
+}
+td input:focus { border-color: var(--accent); background: var(--surface); }
+tbody tr:hover { background: var(--surface-2); }
+.pos { color: var(--pos); } .neg { color: var(--neg); }
+tfoot td { font-weight: 600; border-top: 1px solid var(--line); border-bottom: none; }
+
+/* ---- scenario rows ---- */
+.scen { display: flex; flex-direction: column; }
+.scen-row {
+  display: grid;
+  grid-template-columns: minmax(118px, 1.1fr) minmax(90px, .7fr) 2.2fr;
+  gap: 14px; align-items: center;
+  padding: 11px 0; border-bottom: 1px solid var(--line-soft);
+}
+.scen-row:last-child { border-bottom: none; }
+.scen-name { font-weight: 500; min-width: 0; }
+.scen-val {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 15px; text-align: right; white-space: nowrap;
+}
+.bar-track { position: relative; height: 16px; background: var(--surface-2); border-radius: 2px; min-width: 0; }
+.bar-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line); }
+.bar-fill { position: absolute; top: 2px; bottom: 2px; border-radius: 1px; }
+.worst { background: var(--accent-sv); margin-inline: -10px; padding-inline: 10px; }
+
+/* ---- outlier ---- */
+.verdict { display: flex; flex-wrap: wrap; gap: 24px 36px; align-items: flex-start; }
+.metric { display: flex; flex-direction: column; gap: 3px; }
+.metric .k { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-dim); }
+.metric .v { font-family: var(--mono); font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.chip {
+  display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 600;
+  letter-spacing: .08em; text-transform: uppercase;
+  padding: 5px 10px; border-radius: 3px; border: 1px solid currentColor;
+}
+
+.why { display: flex; flex-direction: column; gap: 12px; }
+.why p { font-size: 15px; max-width: 64ch; }
+footer p { max-width: 72ch; margin: 0; }
+footer a { color: var(--accent); }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+figcaption { font-size: 13px; color: var(--fg-dim); }
+svg { display: block; width: 100%; height: auto; max-width: 100%; }
+
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+dl { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+dt { font-weight: 600; font-size: 14px; }
+dd { margin: 2px 0 0; color: var(--fg-dim); font-size: 14px; }
+code { font-family: var(--mono); font-size: .92em; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+footer { color: var(--fg-faint); font-size: 13px; border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 520px) {
+  .scen-row { grid-template-columns: 1fr auto; }
+  .scen-row .bar-track { grid-column: 1 / -1; }
+}
+</style>
+<style>
+/* standalone reset — the hosted version supplies these itself */
+html { color-scheme: light dark; }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">BCBS 368 · Standardised Framework</div>
+  <h1>Interest rate risk in the banking book</h1>
+  <p class="standfirst">A working implementation of the Basel standardised framework. Enter a repricing profile, apply the six prescribed rate shocks, and read the change in economic value of equity and in net interest income against the regulatory outlier threshold.</p>
+  <div class="byline">Levente Polányi · MSc Finance and Money, University of Basel · two years in asset and liability management, MBH Bank</div>
+</header>
+
+<section>
+  <h2>Why I built it</h2>
+  <div class="panel why">
+    <p>I spent two years producing interest rate risk reporting at a bank. The numbers came out of a system, and I was comfortable explaining what they meant without ever having built the calculation behind them. That bothered me more the longer it went on.</p>
+    <p>So I built it from the Basel standard, to find out whether I actually understood what I had been reporting. The answer was mostly yes. The part I had underestimated is how much of the result comes from behavioural assumptions rather than from the arithmetic.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What this measures</h2>
+  <div class="cols">
+    <div>
+      <h3>ΔEVE — economic value of equity</h3>
+      <p class="note">The present value of every repricing cashflow on the balance sheet, revalued under a shocked curve. It is a point-in-time valuation measure: it asks what the bank's equity is worth today if rates move and nothing else changes. Long-dated positions dominate, because discounting bites hardest at the far end.</p>
+    </div>
+    <div>
+      <h3>ΔNII — net interest income</h3>
+      <p class="note">The earnings effect over the next twelve months, driven only by positions that actually reprice inside that window. A bank can look fine on ΔEVE and still take an earnings hit, or the reverse. Basel assesses NII under the two parallel shocks only.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Curve and capital</h2>
+  <div class="panel controls">
+    <div class="field">
+      <label for="ccy">Currency</label>
+      <select id="ccy">
+        <option value="EUR">EUR — 200 / 250 / 100 bp</option>
+        <option value="GBP">GBP — 250 / 300 / 150 bp</option>
+        <option value="USD">USD — 200 / 300 / 150 bp</option>
+        <option value="CHF">CHF — 150 / 175 / 100 bp</option>
+        <option value="HUF">HUF — 300 / 450 / 200 bp</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="sr">Short rate</label>
+      <input type="range" id="sr" min="-1" max="8" step="0.05" value="2.50">
+      <span class="rangeval" id="srv">2.50 %</span>
+    </div>
+    <div class="field">
+      <label for="lr">Long rate (20y)</label>
+      <input type="range" id="lr" min="-1" max="8" step="0.05" value="3.50">
+      <span class="rangeval" id="lrv">3.50 %</span>
+    </div>
+    <div class="field">
+      <label for="t1">Tier 1 capital (m)</label>
+      <input type="number" id="t1" value="400" step="10" min="1">
+    </div>
+    <div class="field">
+      <button type="button" id="reset">Reset example</button>
+    </div>
+  </div>
+  <p class="note">Basel prescribes shock sizes per currency, shown above as parallel / short / long. The base curve here is a simple exponential interpolation between the short and long anchors, which is enough to show the mechanism.</p>
+</section>
+
+<section>
+  <h2>Repricing profile</h2>
+  <p class="note">Notional repricing in each time band, in millions. The gap is assets less liabilities. A bank funded with short deposits and lending long carries negative gaps at the front and positive gaps at the back, which is the profile loaded below.</p>
+  <div class="panel scroll">
+    <table id="bs">
+      <thead>
+        <tr><th>Time band</th><th>Midpoint (y)</th><th>Assets</th><th>Liabilities</th><th>Gap</th></tr>
+      </thead>
+      <tbody id="bsbody"></tbody>
+      <tfoot>
+        <tr><td>Total</td><td></td><td class="num" id="tA"></td><td class="num" id="tL"></td><td class="num" id="tG"></td></tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>The six prescribed shocks</h2>
+  <figure>
+    <svg id="curves" viewBox="0 0 760 280" role="img" aria-label="Rate shock applied at each maturity, by scenario"></svg>
+    <figcaption>Shock applied at each maturity. The short scalar is <code>e^(−t/4)</code>, so short-rate shocks decay with tenor while the long component builds. This is what makes a steepener and a flattener different animals from a parallel shift.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Change in economic value of equity</h2>
+  <div class="panel scen" id="scen"></div>
+</section>
+
+<section>
+  <h2>Supervisory outlier test</h2>
+  <div class="panel">
+    <div class="verdict">
+      <div class="metric"><span class="k">Worst-case ΔEVE</span><span class="v" id="worstV">—</span></div>
+      <div class="metric"><span class="k">Scenario</span><span class="v" id="worstS" style="font-size:17px">—</span></div>
+      <div class="metric"><span class="k">As % of Tier 1</span><span class="v" id="worstP">—</span></div>
+      <div class="metric"><span class="k">Threshold</span><span class="v" id="thresh">—</span></div>
+      <div class="metric"><span class="k">Status</span><span id="chipWrap"></span></div>
+    </div>
+  </div>
+  <p class="note">A bank whose worst-case ΔEVE exceeds 15% of Tier 1 capital is flagged as a supervisory outlier. That is not a breach of a hard limit; it is the trigger for supervisory attention and, usually, a conversation about hedging the duration gap.</p>
+</section>
+
+<section>
+  <h2>Net interest income, twelve months</h2>
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>Scenario</th><th>ΔNII</th><th>As % of Tier 1</th></tr></thead>
+      <tbody id="niibody"></tbody>
+    </table>
+  </div>
+  <p class="note">Only bands repricing inside one year contribute, weighted by the part of the year remaining after they reprice. A front-loaded negative gap means liabilities reprice before assets do, so a rate rise costs earnings before it helps them.</p>
+</section>
+
+<section>
+  <h2>A real bank, for comparison</h2>
+  <p class="note">HSBC's published ΔEVE sensitivities at 30 June 2026, from the UK IRRBB1 table in their Pillar 3 disclosure. US$ millions, against Tier 1 capital of $151,344m.</p>
+  <div class="panel scen" id="hsbcScen"></div>
+  <div class="panel scroll">
+    <table>
+      <thead><tr><th>Banking NII sensitivity</th><th>ΔNII ($m)</th></tr></thead>
+      <tbody>
+        <tr><td>Parallel up</td><td class="num pos">+4,379</td></tr>
+        <tr><td>Parallel down</td><td class="num neg">−7,065</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note"><strong>The two measures point in opposite directions, and that is the interesting part.</strong> A parallel rise costs HSBC $9.4bn of economic value but adds $4.4bn of banking net interest income. A parallel fall does the reverse. That is the signature of a deposit-funded bank: rate rises improve the margin earned on an enormous non-maturity deposit base, while depressing the present value of the long-dated assets those deposits fund.</p>
+  <p class="note">Their disclosure puts numbers on the assumptions that drive it. Deposits are modelled with a 50% pass-on rate, so only half of any rate move reaches the customer. Non-maturity deposits carry an average repricing maturity of 17 months and a longest of 120 months, against a contractual maturity of zero. The NII figures assume a static balance sheet with no migration from current accounts into term deposits. Each of those is a judgement, and each moves the answer more than the shock size does.</p>
+  <p class="note">The worst case, $9,449m under parallel up, is 6.2% of Tier 1 capital, well inside the 15% outlier threshold.</p>
+</section>
+
+<section>
+  <h2>Method, and what it leaves out</h2>
+  <dl>
+    <dt>Ten bands rather than nineteen</dt>
+    <dd>BCBS 368 specifies nineteen time bands. This uses ten, with the same midpoint convention. The arithmetic is identical; the resolution is coarser.</dd>
+    <dt>No behavioural modelling</dt>
+    <dd>Non-maturity deposits are slotted at their contractual band. In practice this is the single largest modelling judgement in any IRRBB framework: how much of a current account balance is genuinely overnight money and how much is stable for years. Basel caps the share that can be treated as core, and the assumption usually moves the answer more than the shock does.</dd>
+    <dt>No optionality</dt>
+    <dd>Prepayment on fixed-rate loans and early withdrawal on term deposits are both ignored. Both are rate-dependent, and both work against the bank.</dd>
+    <dt>No basis risk</dt>
+    <dd>Every position is discounted off one curve. A real book has assets priced off one index and liabilities off another, and the spread between them moves.</dd>
+    <dt>Single currency</dt>
+    <dd>Aggregation across currencies has its own rules. This values one book.</dd>
+  </dl>
+</section>
+
+<footer>
+  <p>Implemented from the Basel Committee's standardised framework for interest rate risk in the banking book (BCBS d368, April 2016). The repricing profile in the calculator is illustrative and does not describe any institution. Comparison figures are taken from HSBC Holdings plc Pillar 3 Disclosures at 30 June 2026, Table 13 (UK IRRBB1); that bank's own disclosure applies PRA-prescribed shocks and rate floors, which this implementation does not.</p>
+  <p style="margin-top:12px">Levente Polányi · <a href="https://linkedin.com/in/leventepolanyi" target="_blank" rel="noopener">linkedin.com/in/leventepolanyi</a></p>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var BANDS = [
+    { label: "Overnight – 1M", t: 0.04 },
+    { label: "1M – 3M",        t: 0.17 },
+    { label: "3M – 6M",        t: 0.375 },
+    { label: "6M – 12M",       t: 0.75 },
+    { label: "1Y – 2Y",        t: 1.5 },
+    { label: "2Y – 3Y",        t: 2.5 },
+    { label: "3Y – 5Y",        t: 4.0 },
+    { label: "5Y – 7Y",        t: 6.0 },
+    { label: "7Y – 10Y",       t: 8.5 },
+    { label: "10Y +",          t: 15.0 }
+  ];
+
+  var SEED_A = [520, 410, 450, 600, 640, 540, 430, 240, 140,  80];
+  var SEED_L = [1450, 760, 640, 540, 400, 260, 180,  90,  30,  20];
+
+  // BCBS d368 Table 2: parallel, short, long shock sizes in basis points.
+  var SHOCKS = {
+    EUR: { par: 200, shortS: 250, longS: 100 },
+    GBP: { par: 250, shortS: 300, longS: 150 },
+    USD: { par: 200, shortS: 300, longS: 150 },
+    CHF: { par: 150, shortS: 175, longS: 100 },
+    HUF: { par: 300, shortS: 450, longS: 200 }
+  };
+
+  var SCENARIOS = [
+    { id: "par_up",   name: "Parallel up",     nii: true },
+    { id: "par_dn",   name: "Parallel down",   nii: true },
+    { id: "steep",    name: "Steepener",       nii: false },
+    { id: "flat",     name: "Flattener",       nii: false },
+    { id: "short_up", name: "Short rates up",  nii: false },
+    { id: "short_dn", name: "Short rates down",nii: false }
+  ];
+
+  var assets = SEED_A.slice(), liabs = SEED_L.slice();
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function sShort(t) { return Math.exp(-t / 4); }
+  function sLong(t)  { return 1 - sShort(t); }
+
+  // Shock in decimal terms at midpoint t, for one scenario.
+  function shockAt(scen, t, s) {
+    var P = s.par / 10000, S = s.shortS / 10000, L = s.longS / 10000;
+    switch (scen) {
+      case "par_up":   return  P;
+      case "par_dn":   return -P;
+      case "short_up": return  S * sShort(t);
+      case "short_dn": return -S * sShort(t);
+      case "steep":    return -0.65 * S * sShort(t) + 0.90 * L * sLong(t);
+      case "flat":     return  0.80 * S * sShort(t) - 0.60 * L * sLong(t);
+      default:         return 0;
+    }
+  }
+
+  // Base curve: exponential blend between the short anchor and the 20y anchor.
+  function baseRate(t, srPct, lrPct) {
+    var w = 1 - Math.exp(-t / 5);
+    return (srPct + (lrPct - srPct) * w) / 100;
+  }
+
+  function readState() {
+    var ccy = $("ccy").value;
+    return {
+      s: SHOCKS[ccy],
+      ccy: ccy,
+      sr: parseFloat($("sr").value),
+      lr: parseFloat($("lr").value),
+      t1: Math.max(1, parseFloat($("t1").value) || 1)
+    };
+  }
+
+  function gaps() {
+    return BANDS.map(function (b, i) { return (assets[i] || 0) - (liabs[i] || 0); });
+  }
+
+  function deltaEVE(scen, st) {
+    var g = gaps(), total = 0;
+    for (var i = 0; i < BANDS.length; i++) {
+      var t = BANDS[i].t;
+      var r = baseRate(t, st.sr, st.lr);
+      var dfBase = Math.exp(-r * t);
+      var dfShock = Math.exp(-(r + shockAt(scen, t, st.s)) * t);
+      total += g[i] * (dfShock - dfBase);
+    }
+    return total;
+  }
+
+  function deltaNII(scen, st) {
+    var g = gaps(), total = 0;
+    for (var i = 0; i < BANDS.length; i++) {
+      var t = BANDS[i].t;
+      if (t >= 1) continue;
+      total += g[i] * shockAt(scen, t, st.s) * (1 - t);
+    }
+    return total;
+  }
+
+  function fmt(x, dp) {
+    dp = dp === undefined ? 1 : dp;
+    var sign = x < 0 ? "−" : (x > 0 ? "+" : "");
+    return sign + Math.abs(x).toLocaleString("en-GB", {
+      minimumFractionDigits: dp, maximumFractionDigits: dp
+    });
+  }
+  function plain(x) {
+    return x.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+  function cls(x) { return x < 0 ? "neg" : (x > 0 ? "pos" : ""); }
+
+  /* ---------- balance sheet table ---------- */
+  function buildTable() {
+    var body = $("bsbody");
+    body.textContent = "";
+    BANDS.forEach(function (b, i) {
+      var tr = document.createElement("tr");
+
+      var td0 = document.createElement("td");
+      td0.textContent = b.label;
+      tr.appendChild(td0);
+
+      var td1 = document.createElement("td");
+      td1.className = "num";
+      td1.style.color = "var(--fg-faint)";
+      td1.textContent = b.t.toFixed(2);
+      tr.appendChild(td1);
+
+      [["a", assets], ["l", liabs]].forEach(function (pair) {
+        var td = document.createElement("td");
+        var inp = document.createElement("input");
+        inp.type = "number";
+        inp.step = "10";
+        inp.min = "0";
+        inp.id = "in-" + pair[0] + "-" + i;
+        inp.value = pair[1][i];
+        inp.addEventListener("input", function () {
+          pair[1][i] = parseFloat(inp.value) || 0;
+          render();
+        });
+        td.appendChild(inp);
+        tr.appendChild(td);
+      });
+
+      var tdg = document.createElement("td");
+      tdg.className = "num gapcell";
+      tr.appendChild(tdg);
+
+      body.appendChild(tr);
+    });
+  }
+
+  function paintTable() {
+    var g = gaps(), sa = 0, sl = 0, sg = 0;
+    var cells = document.querySelectorAll(".gapcell");
+    for (var i = 0; i < BANDS.length; i++) {
+      cells[i].textContent = fmt(g[i], 0);
+      cells[i].className = "num gapcell " + cls(g[i]);
+      sa += assets[i]; sl += liabs[i]; sg += g[i];
+    }
+    $("tA").textContent = plain(sa);
+    $("tL").textContent = plain(sl);
+    $("tG").textContent = fmt(sg, 0);
+    $("tG").className = "num " + cls(sg);
+  }
+
+  /* ---------- shock curve chart ---------- */
+  var NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) { if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]); }
+    return e;
+  }
+
+  function drawCurves(st) {
+    var svg = $("curves");
+    svg.textContent = "";
+    var W = 760, H = 280, L = 54, R = 150, T = 16, B = 34;
+    var pw = W - L - R, ph = H - T - B;
+
+    var maxAbs = 0;
+    SCENARIOS.forEach(function (sc) {
+      for (var t = 0.04; t <= 20.001; t += 0.25) {
+        maxAbs = Math.max(maxAbs, Math.abs(shockAt(sc.id, t, st.s)));
+      }
+    });
+    maxAbs = Math.max(maxAbs, 0.0001) * 1.12;
+
+    var x = function (t) { return L + (Math.log(1 + t) / Math.log(21)) * pw; };
+    var y = function (v) { return T + ph / 2 - (v / maxAbs) * (ph / 2); };
+
+    // grid
+    [-1, -0.5, 0, 0.5, 1].forEach(function (f) {
+      var v = f * maxAbs, yy = y(v);
+      svg.appendChild(el("line", {
+        x1: L, x2: L + pw, y1: yy, y2: yy,
+        stroke: f === 0 ? "var(--line)" : "var(--line-soft)",
+        "stroke-width": f === 0 ? 1.4 : 1, fill: "none"
+      }));
+      var lbl = el("text", {
+        x: L - 9, y: yy + 4, "text-anchor": "end",
+        fill: "var(--fg-faint)", "font-size": 11, "font-family": "var(--mono)"
+      });
+      lbl.textContent = Math.round(v * 10000) + " bp";
+      svg.appendChild(lbl);
+    });
+
+    [0.25, 1, 3, 10, 20].forEach(function (t) {
+      var xx = x(t);
+      svg.appendChild(el("line", {
+        x1: xx, x2: xx, y1: T, y2: T + ph,
+        stroke: "var(--line-soft)", "stroke-width": 1, fill: "none"
+      }));
+      var lbl = el("text", {
+        x: xx, y: H - 12, "text-anchor": "middle",
+        fill: "var(--fg-faint)", "font-size": 11, "font-family": "var(--mono)"
+      });
+      lbl.textContent = t < 1 ? (t * 12) + "m" : t + "y";
+      svg.appendChild(lbl);
+    });
+
+    var colors = ["var(--neg)", "var(--pos)", "var(--accent)", "var(--fg-dim)", "var(--neg)", "var(--pos)"];
+    var dashes = ["none", "none", "none", "none", "4 3", "4 3"];
+
+    SCENARIOS.forEach(function (sc, i) {
+      var pts = [];
+      for (var t = 0.04; t <= 20.001; t += 0.2) {
+        pts.push(x(t).toFixed(1) + "," + y(shockAt(sc.id, t, st.s)).toFixed(1));
+      }
+      svg.appendChild(el("polyline", {
+        points: pts.join(" "), fill: "none",
+        stroke: colors[i], "stroke-width": 2,
+        "stroke-dasharray": dashes[i],
+        "stroke-linejoin": "round", "stroke-linecap": "round"
+      }));
+
+      var ly = T + 16 + i * 22;
+      svg.appendChild(el("line", {
+        x1: L + pw + 16, x2: L + pw + 40, y1: ly, y2: ly,
+        stroke: colors[i], "stroke-width": 2,
+        "stroke-dasharray": dashes[i], fill: "none"
+      }));
+      var tx = el("text", {
+        x: L + pw + 47, y: ly + 4, fill: "var(--fg-dim)",
+        "font-size": 12, "font-family": "var(--sans)"
+      });
+      tx.textContent = sc.name;
+      svg.appendChild(tx);
+    });
+  }
+
+  /* ---------- scenario panel ---------- */
+  function renderScenarios(st) {
+    var rows = SCENARIOS.map(function (sc) {
+      return { sc: sc, dv: deltaEVE(sc.id, st) };
+    });
+    var max = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.dv); }));
+    max = Math.max(max, 1);
+
+    var worst = rows.reduce(function (a, b) { return b.dv < a.dv ? b : a; });
+
+    var host = $("scen");
+    host.textContent = "";
+    rows.forEach(function (r) {
+      var row = document.createElement("div");
+      row.className = "scen-row" + (r.sc === worst.sc ? " worst" : "");
+
+      var n = document.createElement("div");
+      n.className = "scen-name";
+      n.textContent = r.sc.name;
+      row.appendChild(n);
+
+      var v = document.createElement("div");
+      v.className = "scen-val " + cls(r.dv);
+      v.textContent = fmt(r.dv, 1);
+      row.appendChild(v);
+
+      var track = document.createElement("div");
+      track.className = "bar-track";
+      var mid = document.createElement("div");
+      mid.className = "bar-mid";
+      track.appendChild(mid);
+      var fill = document.createElement("div");
+      fill.className = "bar-fill";
+      var pct = (Math.abs(r.dv) / max) * 50;
+      fill.style.background = r.dv < 0 ? "var(--neg)" : "var(--pos)";
+      if (r.dv < 0) { fill.style.right = "50%"; fill.style.width = pct + "%"; }
+      else { fill.style.left = "50%"; fill.style.width = pct + "%"; }
+      track.appendChild(fill);
+      row.appendChild(track);
+
+      host.appendChild(row);
+    });
+
+    return worst;
+  }
+
+  /* ---------- outlier + NII ---------- */
+  function renderOutlier(worst, st) {
+    var pctT1 = Math.abs(worst.dv) / st.t1 * 100;
+    $("worstV").textContent = fmt(worst.dv, 1);
+    $("worstV").className = "v " + cls(worst.dv);
+    $("worstS").textContent = worst.sc.name;
+    $("worstP").textContent = pctT1.toFixed(1) + " %";
+    $("thresh").textContent = "15.0 %";
+
+    var wrap = $("chipWrap");
+    wrap.textContent = "";
+    var chip = document.createElement("span");
+    chip.className = "chip";
+    if (pctT1 > 15) { chip.textContent = "Outlier"; chip.style.color = "var(--neg)"; }
+    else if (pctT1 > 12) { chip.textContent = "Near threshold"; chip.style.color = "var(--accent)"; }
+    else { chip.textContent = "Within"; chip.style.color = "var(--pos)"; }
+    wrap.appendChild(chip);
+  }
+
+  function renderNII(st) {
+    var body = $("niibody");
+    body.textContent = "";
+    SCENARIOS.filter(function (s) { return s.nii; }).forEach(function (sc) {
+      var dn = deltaNII(sc.id, st);
+      var tr = document.createElement("tr");
+
+      var a = document.createElement("td");
+      a.textContent = sc.name;
+      tr.appendChild(a);
+
+      var b = document.createElement("td");
+      b.className = "num " + cls(dn);
+      b.textContent = fmt(dn, 1);
+      tr.appendChild(b);
+
+      var c = document.createElement("td");
+      c.className = "num";
+      c.style.color = "var(--fg-dim)";
+      c.textContent = (Math.abs(dn) / st.t1 * 100).toFixed(1) + " %";
+      tr.appendChild(c);
+
+      body.appendChild(tr);
+    });
+  }
+
+  function render() {
+    var st = readState();
+    $("srv").textContent = st.sr.toFixed(2) + " %";
+    $("lrv").textContent = st.lr.toFixed(2) + " %";
+    paintTable();
+    drawCurves(st);
+    renderOutlier(renderScenarios(st), st);
+    renderNII(st);
+  }
+
+  ["ccy", "sr", "lr", "t1"].forEach(function (id) {
+    $(id).addEventListener("input", render);
+    $(id).addEventListener("change", render);
+  });
+
+  $("reset").addEventListener("click", function () {
+    assets = SEED_A.slice();
+    liabs = SEED_L.slice();
+    BANDS.forEach(function (_, i) {
+      $("in-a-" + i).value = assets[i];
+      $("in-l-" + i).value = liabs[i];
+    });
+    $("ccy").value = "EUR";
+    $("sr").value = 2.50;
+    $("lr").value = 3.50;
+    $("t1").value = 400;
+    render();
+  });
+
+  /* ---------- HSBC reference panel (static, from Pillar 3 June 2026) ---------- */
+  function renderHSBC() {
+    var rows = [
+      { name: "Parallel up",      v: -9449 },
+      { name: "Parallel down",    v:  4541 },
+      { name: "Steepener",        v:  -465 },
+      { name: "Flattener",        v: -2010 },
+      { name: "Short rates up",   v: -4967 },
+      { name: "Short rates down", v:  2479 }
+    ];
+    var max = 9449;
+    var worstName = "Parallel up";
+    var host = $("hsbcScen");
+    host.textContent = "";
+    rows.forEach(function (r) {
+      var row = document.createElement("div");
+      row.className = "scen-row" + (r.name === worstName ? " worst" : "");
+
+      var n = document.createElement("div");
+      n.className = "scen-name";
+      n.textContent = r.name;
+      row.appendChild(n);
+
+      var v = document.createElement("div");
+      v.className = "scen-val " + cls(r.v);
+      v.textContent = fmt(r.v, 0);
+      row.appendChild(v);
+
+      var track = document.createElement("div");
+      track.className = "bar-track";
+      var mid = document.createElement("div");
+      mid.className = "bar-mid";
+      track.appendChild(mid);
+      var fill = document.createElement("div");
+      fill.className = "bar-fill";
+      var pct = (Math.abs(r.v) / max) * 50;
+      fill.style.background = r.v < 0 ? "var(--neg)" : "var(--pos)";
+      if (r.v < 0) { fill.style.right = "50%"; fill.style.width = pct + "%"; }
+      else { fill.style.left = "50%"; fill.style.width = pct + "%"; }
+      track.appendChild(fill);
+      row.appendChild(track);
+
+      host.appendChild(row);
+    });
+  }
+
+  buildTable();
+  renderHSBC();
+  render();
+})();
+</script>
+</body>
+</html>

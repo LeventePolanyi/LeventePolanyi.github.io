@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="An interactive implementation of the Basel standardised framework for interest rate risk in the banking book: repricing gap ladder, six prescribed rate shocks, change in economic value of equity and net interest income, and the supervisory outlier test.">
+<meta name="description" content="A simplified banking book interest rate risk simulator with six Basel shock shapes, an editable repricing profile and a comparison with HSBC's Pillar 3 disclosure.">
 <meta name="author" content="Levente Polanyi">
 <title>Banking Book Rate Risk</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -217,7 +217,9 @@ tfoot td { font-weight: 600; border-top: 1px solid var(--line); border-bottom: n
 .why { display: flex; flex-direction: column; gap: 12px; }
 .why p { font-size: 15px; max-width: 64ch; }
 footer p { max-width: 72ch; margin: 0; }
-footer a { color: var(--accent); }
+a { color: var(--accent); }
+.takeaway { display: grid; gap: 12px; }
+.takeaway .note { max-width: none; }
 figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
 figcaption { font-size: 13px; color: var(--fg-dim); }
 svg { display: block; width: 100%; height: auto; max-width: 100%; }
@@ -245,17 +247,21 @@ img { max-width: 100%; }
 <div class="wrap">
 
 <header>
-  <div class="eyebrow">BCBS 368 · Standardised Framework</div>
+  <div class="eyebrow">Treasury analytics · Interactive case study</div>
   <h1>Interest rate risk in the banking book</h1>
-  <p class="standfirst">A working implementation of the Basel standardised framework. Enter a repricing profile, apply the six prescribed rate shocks, and read the change in economic value of equity and in net interest income against the regulatory outlier threshold.</p>
+  <p class="standfirst">A simplified simulator based on the Basel framework. Change how quickly assets and liabilities reprice, then see what a rate shock does to the value of the banking book and to earnings over the next year.</p>
+  <div class="panel takeaway">
+    <h3>Why can rising rates reduce economic value and lift earnings?</h3>
+    <p class="note">In HSBC’s June 2026 Pillar 3 disclosure, the parallel-up shock reduced economic value of equity by <strong>US$9.45bn</strong> and increased projected banking net interest income by <strong>US$4.38bn</strong>.</p>
+    <p><a href="#simulator">Try the simulator</a> · <a href="#hsbc">See the HSBC comparison</a></p>
+  </div>
   <div class="byline">Levente Polányi</div>
 </header>
 
 <section>
   <h2>Why I built it</h2>
   <div class="panel why">
-    <p>The Basel standardised framework for interest rate risk fits on a few pages. Six prescribed shocks, a scalar function, a discount curve. Out of that comes a single number that decides whether a supervisor flags a bank as an outlier.</p>
-    <p>I built it to see that mechanism working rather than read about it.</p>
+    <p>My work in asset and liability management at MBH Bank involved monitoring interest rate risk and explaining what drove changes in exposure. I built this tool so someone outside ALM could see how a repricing gap or a change in deposit pricing affects the results.</p>
   </div>
 </section>
 
@@ -264,26 +270,26 @@ img { max-width: 100%; }
   <div class="cols">
     <div>
       <h3>ΔEVE — economic value of equity</h3>
-      <p class="note">The present value of every repricing cashflow on the balance sheet, revalued under a shocked curve. It is a point-in-time valuation measure: it asks what the bank's equity is worth today if rates move and nothing else changes. Long-dated positions dominate, because discounting bites hardest at the far end.</p>
+      <p class="note">The change in the present value of net banking book cash flows after a rate shock. The simulator approximates those cash flows with net repricing amounts in each time band. A long-dated gap is generally more sensitive to a rate move than the same gap at a short maturity.</p>
     </div>
     <div>
       <h3>ΔNII — net interest income</h3>
-      <p class="note">The earnings effect over the next twelve months, driven only by positions that actually reprice inside that window. A bank can look fine on ΔEVE and still take an earnings hit, or the reverse. Basel assesses NII under the two parallel shocks only.</p>
+      <p class="note">The estimated change in interest income minus interest expense over the next twelve months. The simulator uses positions that reprice within the year and shows the two parallel shocks used for Basel NII disclosure.</p>
     </div>
   </div>
 </section>
 
-<section>
+<section id="simulator">
   <h2>Curve and capital</h2>
   <div class="panel controls">
     <div class="field">
       <label for="ccy">Currency</label>
       <select id="ccy">
-        <option value="EUR">EUR — 200 / 250 / 100 bp</option>
-        <option value="GBP">GBP — 250 / 300 / 150 bp</option>
-        <option value="USD">USD — 200 / 300 / 150 bp</option>
-        <option value="CHF">CHF — 150 / 175 / 100 bp</option>
-        <option value="HUF">HUF — 300 / 450 / 200 bp</option>
+        <option value="EUR">EUR · 225 / 350 / 200 bp</option>
+        <option value="GBP">GBP · 275 / 425 / 250 bp</option>
+        <option value="USD">USD · 200 / 300 / 225 bp</option>
+        <option value="CHF">CHF · 175 / 250 / 200 bp</option>
+        <option value="HUF">HUF · 300 / 450 / 200 bp (illustrative)</option>
       </select>
     </div>
     <div class="field">
@@ -304,7 +310,7 @@ img { max-width: 100%; }
       <button type="button" id="reset">Reset example</button>
     </div>
   </div>
-  <p class="note">Basel prescribes shock sizes per currency, shown above as parallel / short / long. The base curve here is a simple exponential interpolation between the short and long anchors, which is enough to show the mechanism.</p>
+  <p class="note">Shock sizes are shown as parallel / short / long. EUR, GBP, USD and CHF use <a href="https://www.bis.org/committees/bcbs/basel-framework/standard/srp/31/inforce/2026-01-01/published/2024-07-16">Basel SRP31, Table 2</a>, effective January 2026. HUF uses an illustrative calibration. The base curve uses an exponential interpolation between the short and long anchors.</p>
 </section>
 
 <section>
@@ -333,37 +339,46 @@ img { max-width: 100%; }
 
 <section>
   <h2>Change in economic value of equity</h2>
+  <p class="note">Amounts are in millions of the selected currency.</p>
   <div class="panel scen" id="scen"></div>
 </section>
 
 <section>
-  <h2>Supervisory outlier test</h2>
+  <h2>Illustrative supervisory outlier test</h2>
   <div class="panel">
     <div class="verdict">
-      <div class="metric"><span class="k">Worst-case ΔEVE</span><span class="v" id="worstV">—</span></div>
+      <div class="metric"><span class="k">Largest ΔEVE loss</span><span class="v" id="worstV">—</span></div>
       <div class="metric"><span class="k">Scenario</span><span class="v" id="worstS" style="font-size:17px">—</span></div>
       <div class="metric"><span class="k">As % of Tier 1</span><span class="v" id="worstP">—</span></div>
       <div class="metric"><span class="k">Threshold</span><span class="v" id="thresh">—</span></div>
       <div class="metric"><span class="k">Status</span><span id="chipWrap"></span></div>
     </div>
   </div>
-  <p class="note">A bank whose worst-case ΔEVE exceeds 15% of Tier 1 capital is flagged as a supervisory outlier. That is not a breach of a hard limit; it is the trigger for supervisory attention and, usually, a conversation about hedging the duration gap.</p>
+  <p class="note">Under the Basel test, an EVE loss greater than 15% of Tier 1 capital triggers supervisory review. The ratio here is illustrative and uses the simplified book above.</p>
 </section>
 
 <section>
   <h2>Net interest income, twelve months</h2>
+  <div class="panel controls">
+    <div class="field">
+      <label for="pass">Liability rate pass-through</label>
+      <input type="range" id="pass" min="0" max="100" step="5" value="100" aria-describedby="pass-note">
+      <span class="rangeval" id="passv">100%</span>
+    </div>
+    <p class="note" id="pass-note">Try 50% to see the default rate-rise loss nearly disappear. At 50%, the model applies half the rate move to liabilities repricing within a year and the full move to assets. The slider changes the earnings estimate. EVE uses its own repricing inputs.</p>
+  </div>
   <div class="panel scroll">
     <table>
-      <thead><tr><th>Scenario</th><th>ΔNII</th><th>As % of Tier 1</th></tr></thead>
+      <thead><tr><th>Scenario</th><th>ΔNII (millions)</th><th>As % of Tier 1</th></tr></thead>
       <tbody id="niibody"></tbody>
     </table>
   </div>
-  <p class="note">Only bands repricing inside one year contribute, weighted by the part of the year remaining after they reprice. A front-loaded negative gap means liabilities reprice before assets do, so a rate rise costs earnings before it helps them.</p>
+  <p class="note">The model weights each band by the part of the year remaining after repricing. With the default profile and full pass-through, short-term funding costs rise faster than asset income. Reducing pass-through can reverse the earnings impact.</p>
 </section>
 
-<section>
-  <h2>A real bank, for comparison</h2>
-  <p class="note">HSBC's published ΔEVE sensitivities at 30 June 2026, from the UK IRRBB1 table in their Pillar 3 disclosure. US$ millions, against Tier 1 capital of $151,344m.</p>
+<section id="hsbc">
+  <h2>HSBC Pillar 3 comparison</h2>
+  <p class="note">HSBC’s reported sensitivities at 30 June 2026, from <a href="https://www.hsbc.com/-/files/hsbc/investors/hsbc-results/2026/interim/pdfs/hsbc-holdings-plc/260810-hsbc-holdings-plc-pillar-3-disclosures-at-30-june-2026.pdf">Pillar 3, Table 13 (UK IRRBB1)</a>. Figures are in US$ millions, with Tier 1 capital of US$151,344m.</p>
   <div class="panel scen" id="hsbcScen"></div>
   <div class="panel scroll">
     <table>
@@ -374,8 +389,8 @@ img { max-width: 100%; }
       </tbody>
     </table>
   </div>
-  <p class="note"><strong>The two measures point in opposite directions, and that is the interesting part.</strong> A parallel rise costs HSBC $9.4bn of economic value but adds $4.4bn of banking net interest income. A parallel fall does the reverse. That is the signature of a deposit-funded bank: rate rises improve the margin earned on an enormous non-maturity deposit base, while depressing the present value of the long-dated assets those deposits fund.</p>
-  <p class="note">Their disclosure puts numbers on the assumptions that drive it. Deposits are modelled with a 50% pass-on rate, so only half of any rate move reaches the customer. Non-maturity deposits carry an average repricing maturity of 17 months and a longest of 120 months, against a contractual maturity of zero. The NII figures assume a static balance sheet with no migration from current accounts into term deposits. Each of those is a judgement, and each moves the answer more than the shock size does.</p>
+  <p class="note">The upward shock reduces HSBC’s economic value while increasing projected banking NII. One way this can happen is when deposit rates rise more slowly than asset yields, supporting near-term earnings, while higher discount rates reduce the present value of longer-dated net cash flows.</p>
+  <p class="note">HSBC used a 50% pass-through assumption on certain interest-bearing deposits at major entities. Its non-maturity deposits had an average modelled repricing maturity of 17 months and a maximum of 120 months. The NII disclosure assumes a static balance sheet with no migration from current accounts to term deposits. The simulator applies one pass-through rate to all liabilities repricing within a year so readers can isolate the effect.</p>
   <p class="note">The worst case, $9,449m under parallel up, is 6.2% of Tier 1 capital, well inside the 15% outlier threshold.</p>
 </section>
 
@@ -383,9 +398,9 @@ img { max-width: 100%; }
   <h2>Method, and what it leaves out</h2>
   <dl>
     <dt>Ten bands rather than nineteen</dt>
-    <dd>BCBS 368 specifies nineteen time bands. This uses ten, with the same midpoint convention. The arithmetic is identical; the resolution is coarser.</dd>
-    <dt>No behavioural modelling</dt>
-    <dd>Non-maturity deposits are slotted at their contractual band. In practice this is the single largest modelling judgement in any IRRBB framework: how much of a current account balance is genuinely overnight money and how much is stable for years. Basel caps the share that can be treated as core, and the assumption usually moves the answer more than the shock does.</dd>
+    <dd>The Basel standardised EVE framework specifies nineteen time bands. The simulator groups net repricing amounts into ten and discounts each at a representative maturity. It omits post-shock rate floors.</dd>
+    <dt>Simplified liability behaviour</dt>
+    <dd>The EVE calculation uses the repricing bands entered above. The NII calculation applies a uniform pass-through rate to liabilities repricing within a year. Banks can model deposit segments separately and estimate how long their balances remain stable.</dd>
     <dt>No optionality</dt>
     <dd>Prepayment on fixed-rate loans and early withdrawal on term deposits are both ignored. Both are rate-dependent, and both work against the bank.</dd>
     <dt>No basis risk</dt>
@@ -396,7 +411,7 @@ img { max-width: 100%; }
 </section>
 
 <footer>
-  <p>Implemented from the Basel Committee's standardised framework for interest rate risk in the banking book (BCBS d368, April 2016). The repricing profile in the calculator is illustrative and does not describe any institution. Comparison figures are taken from HSBC Holdings plc Pillar 3 Disclosures at 30 June 2026, Table 13 (UK IRRBB1); that bank's own disclosure applies PRA-prescribed shocks and rate floors, which this implementation does not.</p>
+  <p>The simulator uses a hypothetical balance sheet. The HSBC comparison reproduces published figures calculated under PRA supervisory scenarios with their own shocks, rate floors and behavioural assumptions.</p>
   <p style="margin-top:12px">Levente Polányi · <a href="https://linkedin.com/in/leventepolanyi" target="_blank" rel="noopener">linkedin.com/in/leventepolanyi</a></p>
 </footer>
 
@@ -422,12 +437,12 @@ img { max-width: 100%; }
   var SEED_A = [520, 410, 450, 600, 640, 540, 430, 240, 140,  80];
   var SEED_L = [1450, 760, 640, 540, 400, 260, 180,  90,  30,  20];
 
-  // BCBS d368 Table 2: parallel, short, long shock sizes in basis points.
+  // Basel SRP31 Table 2 (January 2026), except illustrative HUF values.
   var SHOCKS = {
-    EUR: { par: 200, shortS: 250, longS: 100 },
-    GBP: { par: 250, shortS: 300, longS: 150 },
-    USD: { par: 200, shortS: 300, longS: 150 },
-    CHF: { par: 150, shortS: 175, longS: 100 },
+    EUR: { par: 225, shortS: 350, longS: 200 },
+    GBP: { par: 275, shortS: 425, longS: 250 },
+    USD: { par: 200, shortS: 300, longS: 225 },
+    CHF: { par: 175, shortS: 250, longS: 200 },
     HUF: { par: 300, shortS: 450, longS: 200 }
   };
 
@@ -474,7 +489,8 @@ img { max-width: 100%; }
       ccy: ccy,
       sr: parseFloat($("sr").value),
       lr: parseFloat($("lr").value),
-      t1: Math.max(1, parseFloat($("t1").value) || 1)
+      t1: Math.max(1, parseFloat($("t1").value) || 1),
+      liabilityPass: Number($("pass").value) / 100
     };
   }
 
@@ -495,11 +511,12 @@ img { max-width: 100%; }
   }
 
   function deltaNII(scen, st) {
-    var g = gaps(), total = 0;
+    var total = 0;
     for (var i = 0; i < BANDS.length; i++) {
       var t = BANDS[i].t;
       if (t >= 1) continue;
-      total += g[i] * shockAt(scen, t, st.s) * (1 - t);
+      var repricingGap = assets[i] - liabs[i] * st.liabilityPass;
+      total += repricingGap * shockAt(scen, t, st.s) * (1 - t);
     }
     return total;
   }
@@ -540,6 +557,7 @@ img { max-width: 100%; }
         inp.step = "10";
         inp.min = "0";
         inp.id = "in-" + pair[0] + "-" + i;
+        inp.setAttribute("aria-label", (pair[0] === "a" ? "Assets, " : "Liabilities, ") + b.label);
         inp.value = pair[1][i];
         inp.addEventListener("input", function () {
           pair[1][i] = parseFloat(inp.value) || 0;
@@ -704,10 +722,11 @@ img { max-width: 100%; }
 
   /* ---------- outlier + NII ---------- */
   function renderOutlier(worst, st) {
-    var pctT1 = Math.abs(worst.dv) / st.t1 * 100;
-    $("worstV").textContent = fmt(worst.dv, 1);
-    $("worstV").className = "v " + cls(worst.dv);
-    $("worstS").textContent = worst.sc.name;
+    var loss = Math.min(0, worst.dv);
+    var pctT1 = -loss / st.t1 * 100;
+    $("worstV").textContent = fmt(loss, 1);
+    $("worstV").className = "v " + cls(loss);
+    $("worstS").textContent = loss < 0 ? worst.sc.name : "No loss";
     $("worstP").textContent = pctT1.toFixed(1) + " %";
     $("thresh").textContent = "15.0 %";
 
@@ -740,7 +759,7 @@ img { max-width: 100%; }
       var c = document.createElement("td");
       c.className = "num";
       c.style.color = "var(--fg-dim)";
-      c.textContent = (Math.abs(dn) / st.t1 * 100).toFixed(1) + " %";
+      c.textContent = fmt(dn / st.t1 * 100, 1) + " %";
       tr.appendChild(c);
 
       body.appendChild(tr);
@@ -751,28 +770,28 @@ img { max-width: 100%; }
     var st = readState();
     $("srv").textContent = st.sr.toFixed(2) + " %";
     $("lrv").textContent = st.lr.toFixed(2) + " %";
+    $("passv").textContent = $("pass").value + "%";
     paintTable();
     drawCurves(st);
     renderOutlier(renderScenarios(st), st);
     renderNII(st);
   }
 
-  ["ccy", "sr", "lr", "t1"].forEach(function (id) {
+  ["ccy", "sr", "lr", "t1", "pass"].forEach(function (id) {
     $(id).addEventListener("input", render);
     $(id).addEventListener("change", render);
   });
 
   $("reset").addEventListener("click", function () {
-    assets = SEED_A.slice();
-    liabs = SEED_L.slice();
     BANDS.forEach(function (_, i) {
-      $("in-a-" + i).value = assets[i];
-      $("in-l-" + i).value = liabs[i];
+      $("in-a-" + i).value = assets[i] = SEED_A[i];
+      $("in-l-" + i).value = liabs[i] = SEED_L[i];
     });
     $("ccy").value = "EUR";
     $("sr").value = 2.50;
     $("lr").value = 3.50;
     $("t1").value = 400;
+    $("pass").value = 100;
     render();
   });
 
